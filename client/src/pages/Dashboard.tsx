@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Heart, Plus, Edit2, Trash2, Eye, Copy, Calendar } from "lucide-react";
+import { Heart, Plus, Edit2, Trash2, Eye, Copy, Calendar, AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,6 +25,8 @@ export default function Dashboard() {
 
   const projectsQuery = trpc.projects.list.useQuery(undefined, {
     enabled: isAuthenticated,
+    retry: false,
+    staleTime: 0,
   });
 
   const createProjectMutation = trpc.projects.create.useMutation({
@@ -75,12 +77,32 @@ export default function Dashboard() {
     toast.success("Link copied to clipboard!");
   };
 
+  // Phase 1: Auth loading — redirectOnUnauthenticated handles the redirect
+  // This is brief and only shows while the auth.me query resolves
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-600">Loading your keepsakes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase 2: Auth error — show error with retry option
+  if (isAuthenticated === false && user === null) {
+    // The redirectOnUnauthenticated effect will handle this,
+    // but show a brief error state in case the redirect is slow
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Session expired</h2>
+          <p className="text-slate-600 mb-4">Redirecting to login...</p>
+          <Button onClick={() => window.location.href = "/login"}>
+            Go to login
+          </Button>
         </div>
       </div>
     );
@@ -173,6 +195,19 @@ export default function Dashboard() {
             <div className="w-12 h-12 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-slate-600">Loading your keepsakes...</p>
           </div>
+        ) : projectsQuery.isError ? (
+          <div className="text-center py-12">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+              Failed to load keepsakes
+            </h3>
+            <p className="text-slate-600 mb-4">
+              {projectsQuery.error?.message || "An unexpected error occurred"}
+            </p>
+            <Button onClick={() => projectsQuery.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : projectsQuery.data && projectsQuery.data.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projectsQuery.data.map((project, idx) => (
@@ -225,7 +260,7 @@ export default function Dashboard() {
                       onClick={() => navigate(`/editor/${project.id}`)}
                       className="flex-1"
                     >
-                      <Edit2 className="w-4 h-4 mr-1" />
+                      <Edit2 className="w-4 w-4 mr-1" />
                       Edit
                     </Button>
                     {project.publicUrl && (

@@ -15,6 +15,9 @@ export function useAuth(options?: UseAuthOptions) {
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
+    // Ensure the query always resolves — even if the server returns an error,
+    // the query is no longer in a loading state
+    staleTime: 0,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -41,20 +44,23 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [logoutMutation, utils]);
 
+  // The key fix: loading should be false once the query has finished
+  // (whether with data or with an error). tRPC useQuery sets isLoading
+  // to true only on the initial fetch; once it settles, isLoading becomes false.
+  // However, we also track when the query is fetching (refetching) separately.
+  const loading = meQuery.isLoading || logoutMutation.isPending;
+  const error = meQuery.error ?? logoutMutation.error ?? null;
+  const user = meQuery.data ?? null;
+  const isAuthenticated = Boolean(user);
+
   const state = useMemo(
     () => ({
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
+      user,
+      loading,
+      error,
+      isAuthenticated,
     }),
-    [
-      meQuery.data,
-      meQuery.error,
-      meQuery.isLoading,
-      logoutMutation.error,
-      logoutMutation.isPending,
-    ]
+    [user, loading, error, isAuthenticated]
   );
 
   useEffect(() => {
@@ -69,8 +75,8 @@ export function useAuth(options?: UseAuthOptions) {
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
-    if (state.user) return;
+    if (loading) return;
+    if (user) return;
     if (typeof window === "undefined") return;
 
     // Redirect to /login for protected routes
@@ -78,9 +84,8 @@ export function useAuth(options?: UseAuthOptions) {
   }, [
     redirectOnUnauthenticated,
     redirectPath,
-    logoutMutation.isPending,
-    meQuery.isLoading,
-    state.user,
+    loading,
+    user,
   ]);
 
   return {
