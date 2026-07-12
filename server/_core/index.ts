@@ -1,4 +1,7 @@
-import "dotenv/config";
+// Only load dotenv in local development; Vercel sets env vars directly
+if (process.env.NODE_ENV === "development" && !process.env.VERCEL) {
+  await import("dotenv/config");
+}
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -6,7 +9,6 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter, registerUploadRoutes } from "../routers";
 import { createContext } from "./context";
 import { validateRuntimeEnv } from "./env";
-import { serveStatic, setupVite } from "./vite";
 
 export function createApp() {
   validateRuntimeEnv();
@@ -48,6 +50,7 @@ async function startServer() {
   const app = createApp();
   const server = createServer(app);
   // development mode uses Vite, production mode uses static files
+  const { setupVite, serveStatic } = await import("./vite");
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
