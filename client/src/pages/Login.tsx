@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Heart, Mail, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,15 +55,30 @@ export default function Login() {
       });
 
       if (error) {
-        setErrors({ password: "Invalid email or password. Please try again." });
-        toast.error("Login failed");
+        // Display the actual Supabase error message for debugging
+        // In production, Supabase intentionally returns "Invalid login credentials"
+        // for both wrong passwords AND unconfirmed emails (security by design)
+        const actualError = error.message;
+        
+        // Provide a helpful hint if it's likely an unconfirmed email
+        let displayError = actualError;
+        if (
+          actualError.toLowerCase().includes("invalid login credentials") ||
+          actualError.toLowerCase().includes("invalid login")
+        ) {
+          displayError = "Invalid email or password. If you recently signed up, please check your email for a confirmation link before signing in.";
+        }
+        
+        setErrors({ password: displayError });
+        toast.error("Login failed", { description: actualError });
         return;
       }
 
       toast.success("Welcome back!");
       navigate("/dashboard");
     } catch (err: unknown) {
-      toast.error("Something went wrong. Please try again.");
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Something went wrong", { description: message });
       console.error("Login error:", err);
     } finally {
       setLoading(false);
@@ -81,10 +96,10 @@ export default function Login() {
       });
 
       if (error) {
-        toast.error("Google sign-in failed. Please try again.");
+        toast.error("Google sign-in failed", { description: error.message });
       }
     } catch (err: unknown) {
-      toast.error("Something went wrong. Please try again.");
+      toast.error("Something went wrong", { description: err instanceof Error ? err.message : "Unknown error" });
       console.error("Google login error:", err);
     } finally {
       setGoogleLoading(false);

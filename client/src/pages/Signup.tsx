@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Heart, ArrowRight } from "lucide-react";
+import { ArrowRight, Mail, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,8 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [success, setSuccess] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
 
   // Check if already authenticated
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error, data } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
@@ -87,20 +88,32 @@ export default function Signup() {
       });
 
       if (error) {
-        if (error.message.includes("already registered")) {
+        // Show the actual Supabase error for debugging
+        if (error.message.includes("already registered") || error.message.includes("already been registered")) {
           setErrors({ email: "An account with this email already exists. Please sign in instead." });
           toast.error("Account already exists");
         } else {
-          toast.error(error.message);
+          toast.error("Signup failed", { description: error.message });
+          setErrors({ email: error.message });
         }
         return;
       }
 
-      setSuccess(true);
-      toast.success("Account created! Redirecting to dashboard...");
+      // Check if the user needs email verification
+      // If data.session is null, the user was created but email confirmation is required
+      if (!data.session) {
+        setVerificationEmail(email.trim().toLowerCase());
+        setNeedsVerification(true);
+        toast.success("Account created! Please check your email to confirm your account.");
+        return;
+      }
+
+      // User was auto-confirmed (email confirmation disabled in Supabase)
+      toast.success("Account created! Welcome!");
       navigate("/dashboard");
     } catch (err: unknown) {
-      toast.error("Something went wrong. Please try again.");
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Something went wrong", { description: message });
       console.error("Signup error:", err);
     } finally {
       setLoading(false);
@@ -118,22 +131,102 @@ export default function Signup() {
       });
 
       if (error) {
-        toast.error("Google sign-up failed. Please try again.");
+        toast.error("Google sign-up failed", { description: error.message });
       }
     } catch (err: unknown) {
-      toast.error("Something went wrong. Please try again.");
+      toast.error("Something went wrong", { description: err instanceof Error ? err.message : "Unknown error" });
       console.error("Google signup error:", err);
     } finally {
       setGoogleLoading(false);
     }
   };
 
+  const handleResendVerification = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: verificationEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) {
+        toast.error("Failed to resend", { description: error.message });
+        return;
+      }
+
+      toast.success("Verification email resent!");
+    } catch (err: unknown) {
+      toast.error("Something went wrong", { description: err instanceof Error ? err.message : "Unknown error" });
+      console.error("Resend error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle Enter key submission
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
+      if (needsVerification) return;
       handleSignup(e as unknown as React.FormEvent);
     }
   };
+
+  // Verification needed state
+  if (needsVerification) {
+    return (
+      <AuthPage
+        title="Verify your email"
+        subtitle={`We've sent a confirmation link to ${verificationEmail}. Please check your inbox to activate your account.`}
+      >
+        <div className="flex flex-col items-center text-center py-4">
+          <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+            <Mail className="h-8 w-8 text-blue-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground mb-2">
+            Almost there!
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+            Please click the confirmation link in the email we sent to <strong>{verificationEmail}</strong>. After confirming, you'll be able to sign in.
+          </p>
+          <div className="space-y-3 w-full">
+            <Button
+              className="w-full h-12 bg-rose-500 hover:bg-rose-600 text-white"
+              onClick={() => navigate("/login")}
+            >
+              Go to sign in
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full h-12"
+              onClick={handleResendVerification}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Spinner className="h-4 w-4 mr-2" />
+                  Resending...
+                </>
+              ) : (
+                "Resend verification email"
+              )}
+            </Button>
+          </div>
+          <div className="mt-6">
+            <a
+              href="/login"
+              className="text-sm text-primary hover:underline underline-offset-2"
+            >
+              Already confirmed? Sign in
+            </a>
+          </div>
+        </div>
+      </AuthPage>
+    );
+  }
 
   return (
     <AuthPage
