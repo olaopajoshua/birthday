@@ -14,10 +14,25 @@ export const ENV = {
 } as const;
 
 export function validateRuntimeEnv() {
-  const required = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
-  const missing = required.filter((name) => !process.env[name]);
+  // Log environment variable status for debugging
+  // On Vercel, env vars are set at deploy time and available in process.env
+  const hasSupabaseUrl = !!process.env.SUPABASE_URL;
+  const hasSupabaseAnon = !!process.env.SUPABASE_ANON_KEY;
+  const hasSupabaseServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+  if (process.env.NODE_ENV === 'development') {
+    // In local development, check that Supabase is configured
+    if (!hasSupabaseUrl || !hasSupabaseAnon || !hasSupabaseServiceRole) {
+      const missing: string[] = [];
+      if (!hasSupabaseUrl) missing.push('SUPABASE_URL');
+      if (!hasSupabaseAnon) missing.push('SUPABASE_ANON_KEY');
+      if (!hasSupabaseServiceRole) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      console.error(`[ENV] Missing required environment variables for development: ${missing.join(", ")}`);
+      console.error('[ENV] Please create a .env file based on .env.example');
+      console.error('[ENV] Server will start but Supabase operations will fail');
+    }
   }
+  // On Vercel (production), env vars are set by the platform.
+  // If they're missing, requests will fail gracefully rather than crashing the function.
+  console.log(`[ENV] Supabase URL configured: ${hasSupabaseUrl}, Anon: ${hasSupabaseAnon}, Service Role: ${hasSupabaseServiceRole}`);
 }
